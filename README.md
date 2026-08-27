@@ -1,0 +1,88 @@
+# 3D 点云语义分割标注平台 (Starter)
+
+面向**地图 / 测绘 / 高精地图**场景的 3D 点云语义分割标注工具 starter。
+技术栈：**Vue 3 + TypeScript + Vite + Cesium + Pinia**。
+
+> 本 starter 内置一片「示例点云」，开箱即跑，**无需任何外部点云文件或 Cesium Ion token**。
+> 加载你自己的 .pcd / .las 点云见下方「接入真实点云」。
+
+## 快速开始
+
+```bash
+# 需要 Node.js 20.x LTS，并安装 pnpm
+npm install -g pnpm
+
+cd point-cloud-annotator
+pnpm install
+pnpm run dev      # 自动打开 http://localhost:5173
+```
+
+界面出来后：
+- 鼠标拖拽旋转 / 滚轮缩放查看点云
+- 顶部工具栏选一个语义类别（如「建筑」）
+- **按住左键在点云上拖动**即可把经过的点染成当前类别（单击也可单点标注）
+- 右侧面板实时显示各类别点数
+- 点「导出 JSON」下载标注结果（id + 类别 + 经纬度高程）
+
+## 目录结构
+
+```
+point-cloud-annotator/
+├── index.html
+├── vite.config.ts          # Vite + vite-plugin-cesium
+├── tsconfig.json
+└── src/
+    ├── main.ts             # 入口：挂载 Vue + Pinia
+    ├── App.vue             # 布局：画布 + 工具栏 + 类别面板
+    ├── styles/main.css
+    ├── types/index.ts      # SemanticClass / PointRecord 类型
+    ├── store/annotation.ts # Pinia：类别、当前类别、计数
+    ├── composables/
+    │   ├── usePointCloud.ts      # 核心：点云加载 + 拾取上色 + 导出
+    │   └── pointCloudRegistry.ts # 跨组件共享点云 API
+    └── components/
+        ├── ViewerCanvas.vue # Cesium Viewer 挂载 + 示例点云
+        ├── Toolbar.vue      # 类别选择 + 导出
+        └── ClassPanel.vue   # 类别列表 + 计数
+```
+
+## 接入真实点云（.pcd / .las）
+
+Cesium 渲染点云的标准方式是 **3D Tiles (pnts)**。需要先把你的点云转成 pnts：
+
+**方式 A：py3dtiles（本地，免费）**
+```bash
+pip install py3dtiles
+py3dtiles translate your_scan.pcd ./tileset --format pnts
+# 或 .las/.laz
+```
+然后把生成的 `tileset` 目录放到 `public/`，在 `usePointCloud.ts` 里调用：
+```ts
+await pc.loadTileset('/tileset/tileset.json')
+```
+
+**方式 B：Cesium Ion（在线，免费额度）**
+把点云上传到 Cesium Ion，用 assetId 加载：
+```ts
+await Cesium.Cesium3DTileset.fromIonAssetId(ASSET_ID)
+```
+
+真实点云的拾取对象类型是 `Cesium3DTilePointFeature`（而非示例里的 `PointPrimitive`），
+按 feature 批量上色即可，思路与本 starter 一致。
+
+## 下一步可扩展（简历亮点）
+
+1. **真实 .pcd 加载** + 点云分块 / LOD（3D Tiles 天然支持）
+2. **笔刷半径**：当前是拖拽逐点拾取，可加圆形/方形范围拾取
+3. **撤销 / 重做**：维护操作栈
+4. **其他标注类型**：3D 包围盒、矢量线/面（道路边界、车道线 —— 高精地图核心）
+5. **工程化**：标注结果存本地 / 后端、多人协作、快捷键、类别可配置
+6. **README + GitHub**：把仓库推上去，简历直接贴链接
+
+## 常用命令
+
+```bash
+pnpm run dev      # 本地开发
+pnpm run build    # 类型检查 + 生产构建
+pnpm run preview  # 预览构建产物
+```

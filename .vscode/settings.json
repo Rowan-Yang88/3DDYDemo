@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "*.vue": "vue"
+  },
+  "editor.languageDetection": false
+}
