@@ -17,6 +17,8 @@ export const useAnnotationStore = defineStore('annotation', () => {
   const currentClassId = ref<number>(1)
   // true = 左键涂鸦（相机不动），false = 左键拖动相机（不涂鸦）
   const paintMode = ref<boolean>(false)
+  // 笔刷半径（屏幕像素），影响拖动涂色时一次性能覆盖多少个点
+  const brushRadius = ref<number>(12)
   const counts = reactive<Record<number, number>>({})
   const totalPoints = ref<number>(0)
 
@@ -39,6 +41,7 @@ export const useAnnotationStore = defineStore('annotation', () => {
     classes,
     currentClassId,
     paintMode,
+    brushRadius,
     counts,
     totalPoints,
     setCurrentClass,

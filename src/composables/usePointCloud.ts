@@ -55,31 +55,25 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     if (!rec) return
     rec.classId = classId
     rec.prim.color = cssToColor(store.colorOf(classId))
-    recalcCounts()
+  }
+
+  // 静默版：批量上色时跳过逐次计数，只在最后统一算一次
+  function setClassQuiet(id: number, classId: number) {
+    const rec = records.get(id)
+    if (!rec) return
+    rec.classId = classId
+    rec.prim.color = cssToColor(store.colorOf(classId))
   }
 
   // 在屏幕坐标处拾取最近点并上色（核心交互）
   // scene.pick() 对 PointPrimitive 极不可靠（点太小容易 miss），
   // 改用手动最近点搜索：投影所有点到屏幕，取鼠标半径 radius 内最近的点。
-  const PICK_RADIUS = 8 // 屏幕像素容差
-
-  function paintAt(windowPos: Cesium.Cartesian2) {
-    const picked = viewer.scene.pick(windowPos)
-    // 优先用 Cesium 官方拾取（精确命中时）
-    if (
-      picked &&
-      picked.primitive === collection &&
-      typeof picked.id === 'number'
-    ) {
-      setClass(picked.id as number, store.currentClassId)
-      return
-    }
-    // 兜底：手动最近点搜索
-    const w = viewer.scene.canvas.clientWidth
-    const h = viewer.scene.canvas.clientHeight
-    let bestId: number | undefined
-    let bestDist2 = PICK_RADIUS * PICK_RADIUS
+  // 半径内批量上色：返回本次涂到的所有点 id（用于拖动结束时统一算计数）
+  function paintRadius(windowPos: Cesium.Cartesian2, silent = false): number[] {
+    const r2 = store.brushRadius * store.brushRadius
     const tmp = new Cesium.Cartesian3()
+    const hit: number[] = []
+
     for (const [id, rec] of records) {
       const sp = Cesium.SceneTransforms.worldToWindowCoordinates(
         viewer.scene,
@@ -90,12 +84,16 @@ export function usePointCloud(viewer: Cesium.Viewer) {
       const dx = sp.x - windowPos.x
       const dy = sp.y - windowPos.y
       const d2 = dx * dx + dy * dy
-      if (d2 < bestDist2) {
-        bestDist2 = d2
-        bestId = id
+      if (d2 <= r2) {
+        if (silent) {
+          setClassQuiet(id, store.currentClassId)
+        } else {
+          setClass(id, store.currentClassId)
+        }
+        hit.push(id)
       }
     }
-    if (bestId !== undefined) setClass(bestId, store.currentClassId)
+    return hit
   }
 
   const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
@@ -104,19 +102,20 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     if (store.paintMode) {
       painting.value = true
       ;(viewer.scene.screenSpaceCameraController as any).enableInputs = false
-      paintAt(m.position)
+      paintRadius(m.position, true)  // 拖动时静默上色，抬鼠标后再统一算计数
     }
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
   handler.setInputAction((m: any) => {
-    if (painting.value) paintAt(m.endPosition)
+    if (painting.value) paintRadius(m.endPosition, true)  // 拖动中静默上色
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
   handler.setInputAction(() => {
+    if (painting.value) recalcCounts()  // 抬鼠标时统一算一次计数
     painting.value = false
     ;(viewer.scene.screenSpaceCameraController as any).enableInputs = true
   }, Cesium.ScreenSpaceEventType.LEFT_UP)
-  // 左键单击（不放拖）→ 始终拾取单点，不影响相机
+  // 左键单击（不放拖）→ 半径内所有点都上色，不影响相机
   handler.setInputAction((m: any) => {
-    paintAt(m.position)
+    paintRadius(m.position, false)
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 
   // 生成示例点云（地面 + 几栋建筑方块 + 散点植被），无任何外部依赖
@@ -227,5 +226,5 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     viewer.scene.primitives.remove(collection)
   }
 
-  return { loadSample, loadTileset, paintAt, exportAnnotations, dispose, collection }
+  return { loadSample, loadTileset, paintRadius, exportAnnotations, dispose, collection }
 }

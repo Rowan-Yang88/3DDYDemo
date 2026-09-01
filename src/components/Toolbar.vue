@@ -4,6 +4,13 @@ import { getPointCloudApi } from '../composables/pointCloudRegistry'
 
 const store = useAnnotationStore()
 
+const brushOptions = [
+  { label: 'S', value: 6 },
+  { label: 'M', value: 12 },
+  { label: 'L', value: 20 },
+  { label: 'XL', value: 32 },
+]
+
 function exportAnnotations() {
   getPointCloudApi()?.exportAnnotations()
 }
@@ -29,6 +36,16 @@ function exportAnnotations() {
     >
       {{ store.paintMode ? '涂鸦中' : '相机模式' }}
     </button>
+    <span class="brush-size">
+      <span class="brush-label">笔刷</span>
+      <button
+        v-for="opt in brushOptions"
+        :key="opt.value"
+        :class="{ active: store.brushRadius === opt.value }"
+        @click="store.brushRadius = opt.value"
+        :title="opt.label"
+      >{{ opt.label }}</button>
+    </span>
     <button class="export" @click="exportAnnotations">导出 JSON</button>
   </div>
 </template>
@@ -91,5 +108,24 @@ function exportAnnotations() {
 .toolbar .export {
   background: #2563eb;
   border-color: #2563eb;
+}
+.toolbar .brush-size {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid #2a3140;
+}
+.toolbar .brush-label {
+  font-size: 12px;
+  color: #888;
+}
+.toolbar .brush-size button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.toolbar .brush-size button.active {
+  background: #1d2430;
+  border-color: #f59e0b;
 }
 </style>
