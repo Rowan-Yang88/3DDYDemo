@@ -10,6 +10,7 @@ import * as Cesium from 'cesium'
 // 后续 RenderState.fromCache 处的 out-of-range 检查。
 import { usePointCloud } from '../composables/usePointCloud'
 import { registerPointCloud } from '../composables/pointCloudRegistry'
+import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 
 const container = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer
@@ -23,6 +24,9 @@ import { ContextLimits } from '@cesium/engine'
 
 ;(ContextLimits as any)._minimumAliasedLineWidth = 0
 ;(ContextLimits as any)._maximumAliasedLineWidth = 100
+
+// 启用键盘快捷键
+useKeyboardShortcuts()
 
 onMounted(() => {
   // baseLayer:false + globe.show=false => 完全离线，无需 Cesium Ion token

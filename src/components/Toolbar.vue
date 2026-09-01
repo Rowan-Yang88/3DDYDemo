@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useAnnotationStore } from '../store/annotation'
 import { getPointCloudApi } from '../composables/pointCloudRegistry'
 
@@ -10,6 +11,21 @@ const brushOptions = [
   { label: 'L', value: 20 },
   { label: 'XL', value: 32 },
 ]
+
+const fileInput = ref<HTMLInputElement>()
+function onPcdSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  file.arrayBuffer().then((buf) => {
+    try {
+      getPointCloudApi()?.loadPcd(buf)
+    } catch (err) {
+      alert('点云加载失败：' + (err as Error).message)
+    }
+  })
+  input.value = '' // 允许重复选择同一文件
+}
 
 function exportAnnotations() {
   getPointCloudApi()?.exportAnnotations()
@@ -36,6 +52,14 @@ function exportAnnotations() {
     >
       {{ store.paintMode ? '涂鸦中' : '相机模式' }}
     </button>
+    <button
+      :class="['erase', { active: store.eraseMode }]"
+      @click="store.eraseMode = !store.eraseMode"
+      :disabled="!store.paintMode"
+      :title="store.paintMode ? '进入涂鸦模式后可启用橡皮擦' : '需先开启涂鸦模式'"
+    >
+      {{ store.eraseMode ? '橡皮擦：开' : '橡皮擦' }}
+    </button>
     <span class="brush-size">
       <span class="brush-label">笔刷</span>
       <button
@@ -46,7 +70,29 @@ function exportAnnotations() {
         :title="opt.label"
       >{{ opt.label }}</button>
     </span>
+    <span class="history-btns">
+      <button
+        class="undo"
+        @click="getPointCloudApi()?.undo()"
+        :disabled="store.historyIndex < 0"
+        title="撤销 (Ctrl+Z)"
+      >撤销</button>
+      <button
+        class="redo"
+        @click="getPointCloudApi()?.redo()"
+        :disabled="store.historyIndex >= store.history.length - 1"
+        title="重做 (Ctrl+Y)"
+      >重做</button>
+    </span>
     <button class="export" @click="exportAnnotations">导出 JSON</button>
+    <input
+      ref="fileInput"
+      type="file"
+      accept=".pcd"
+      style="display: none"
+      @change="onPcdSelected"
+    />
+    <button class="import" @click="fileInput?.click()">导入点云</button>
   </div>
 </template>
 
@@ -58,13 +104,15 @@ function exportAnnotations() {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 8px 14px;
   background: rgba(20, 24, 33, 0.85);
   border: 1px solid #2a3140;
   border-radius: 10px;
   backdrop-filter: blur(6px);
   z-index: 10;
+  width: max-content;
+  max-width: 95vw;
 }
 .toolbar .title {
   font-weight: 600;
@@ -105,9 +153,28 @@ function exportAnnotations() {
   border-color: #f59e0b;
   color: #fff;
 }
+.toolbar .erase {
+  background: #161b24;
+}
+.toolbar .erase:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.toolbar .erase.active {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
 .toolbar .export {
   background: #2563eb;
   border-color: #2563eb;
+}
+.toolbar .import {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+.toolbar .import:hover {
+  background: #22c55e;
 }
 .toolbar .brush-size {
   display: flex;
@@ -127,5 +194,25 @@ function exportAnnotations() {
 .toolbar .brush-size button.active {
   background: #1d2430;
   border-color: #f59e0b;
+}
+.toolbar .history-btns {
+  display: flex;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid #2a3140;
+}
+.toolbar .undo,
+.toolbar .redo {
+  background: #161b24;
+  min-width: 48px;
+}
+.toolbar .undo:disabled,
+.toolbar .redo:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.toolbar .undo:not(:disabled):hover,
+.toolbar .redo:not(:disabled):hover {
+  background: #2a3140;
 }
 </style>

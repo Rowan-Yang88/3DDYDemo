@@ -8,6 +8,12 @@
 - 🎯 支持 6 类语义标注：地面/道路、建筑、植被、车辆、杆状物、未标注
 - 🖌️ **涂鸦模式** / **相机模式** 自由切换，左键拖动连续涂色
 - 🖊️ **笔刷大小可调**（S / M / L / XL），适应精细标注或大范围涂抹
+- 🧽 **橡皮擦**：误涂点一键擦回「未标注」
+- 🔍 **深度遮挡**：只涂相机可见的点，不误涂被建筑遮挡的背面点
+- 🌊 **路径补偿**：快速拖动时沿轨迹插值，避免漏涂
+- ↩️ **撤销 / 重做**：操作历史栈，支持 `Ctrl+Z` / `Ctrl+Y`
+- ⌨️ **键盘快捷键**：`1`-`6` 切类别、`E` 橡皮擦、`B` 笔刷循环（详见下方）
+- 📂 **直接导入 .pcd**：前端解析，零依赖，复用整套标注链路
 - 📊 右侧面板实时显示各类别点数统计
 - 📤 一键导出标注结果（JSON，含经纬度高程）
 - ⚙️ 支持加载真实 .pcd / .las 转出的 3D Tiles 点云
@@ -26,10 +32,15 @@
 
 ### 键盘快捷键
 
-| 操作 | 说明 |
-|------|------|
-| 默认左键拖 | 旋转视角 |
-| 涂鸦模式下左键拖 | 连续标注（笔刷半径内所有点） |
+| 快捷键 | 操作 |
+|--------|------|
+| `Ctrl+Z` | 撤销 |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | 重做 |
+| `1`-`6` | 切换类别（1=地面/道路, 2=建筑, 3=植被, 4=车辆, 5=杆状物, 6=未标注） |
+| `E` | 切换橡皮擦 |
+| `B` | 笔刷往大循环（S→M→L→XL） |
+| `Shift+B` | 笔刷往小循环（XL→L→M→S） |
+| 涂鸦模式下左键拖 | 连续标注 |
 | 涂鸦模式下左键单击 | 单点标注 |
 | 右键拖 | 平移视角 |
 | 滚轮 | 缩放 |
@@ -67,8 +78,10 @@ point-cloud-annotator/
     ├── types/index.ts      # SemanticClass / PointRecord 类型
     ├── store/annotation.ts # Pinia：类别、当前类别、笔刷半径、计数
     ├── composables/
-    │   ├── usePointCloud.ts      # 核心：点云加载 + 拾取上色 + 导出
-    │   └── pointCloudRegistry.ts # 跨组件共享点云 API
+    │   ├── usePointCloud.ts      # 核心：点云加载 + 拾取上色 + 导出 + 撤销重做
+    │   ├── pointCloudRegistry.ts # 跨组件共享点云 API
+    │   ├── pcd.ts                # .pcd 文件解析（ASCII / binary_little_endian）
+    │   └── useKeyboardShortcuts.ts # 键盘快捷键
     └── components/
         ├── ViewerCanvas.vue # Cesium Viewer 挂载 + 示例点云
         ├── Toolbar.vue      # 类别选择 + 笔刷大小 + 导出
@@ -77,35 +90,47 @@ point-cloud-annotator/
 
 ## 接入真实点云（.pcd / .las）
 
-Cesium 渲染点云的标准方式是 **3D Tiles (pnts)**。需要先把你的点云转成 pnts：
+本 starter 支持**两种方式**加载真实点云：
 
-**方式 A：py3dtiles（本地，免费）**
+### 方式 A：直接导入 .pcd（推荐先试，零依赖）
+点击工具栏「导入点云」按钮选一个 `.pcd` 文件即可。
+前端用 `src/composables/pcd.ts` 直接解析（支持 ASCII / binary_little_endian），
+把局部坐标经 ENU 映射到 Cesium 世界坐标后，复用 `PointPrimitiveCollection` 标注链路
+（笔刷、橡皮擦、深度遮挡、撤销重做、导出全部通用）。
+
+- 适合作品集演示（数千~数万点，超 6 万点会自动降采样）
+- 默认原点为北京（116.391, 39.907），可在 `store.pcdOrigin` 改成点云实际经纬度
+- 不支持 `binary_compressed` 格式，请用 `binary` 或 `ascii` 导出
+
+### 方式 B：3D Tiles (pnts)（生产级，百万级点）
+Cesium 渲染大规模点云的标准方式是 **3D Tiles (pnts)**。先把点云转成 pnts：
+
+**py3dtiles（本地，免费）**
 ```bash
 pip install py3dtiles
 py3dtiles translate your_scan.pcd ./tileset --format pnts
 # 或 .las/.laz
 ```
-然后把生成的 `tileset` 目录放到 `public/`，在 `usePointCloud.ts` 里调用：
+把生成的 `tileset` 目录放到 `public/`，调用：
 ```ts
 await pc.loadTileset('/tileset/tileset.json')
 ```
 
-**方式 B：Cesium Ion（在线，免费额度）**
-把点云上传到 Cesium Ion，用 assetId 加载：
+**Cesium Ion（在线，免费额度）**
 ```ts
 await Cesium.Cesium3DTileset.fromIonAssetId(ASSET_ID)
 ```
 
-真实点云的拾取对象类型是 `Cesium3DTilePointFeature`（而非示例里的 `PointPrimitive`），
-按 feature 批量上色即可，思路与本 starter 一致。
+真实 3D Tiles 点云的拾取对象类型是 `Cesium3DTilePointFeature`（而非示例的 `PointPrimitive`），
+按 feature 批量上色即可，思路与本项目一致。
 
 ## 下一步可扩展（简历亮点）
 
-1. **真实 .pcd 加载** + 点云分块 / LOD（3D Tiles 天然支持）
-2. **撤销 / 重做**：维护操作栈，支持 Ctrl+Z 回退
-3. **其他标注类型**：3D 包围盒、矢量线/面（道路边界、车道线 —— 高精地图核心）
-4. **工程化**：标注结果持久化（IndexedDB / 后端）、多人协作、快捷键、类别可配置
-5. **README + GitHub**：把仓库推上去，简历直接贴链接
+1. **真实大规模点云**：当前直接导入 .pcd 适合作品集（数万点）；百万级激光雷达建议走 3D Tiles(pnts) + LOD 流式加载（接口 `loadTileset` 已预留）
+2. **其他标注类型**：3D 包围盒、矢量线/面（道路边界、车道线 —— 高精地图核心）
+3. **工程化**：标注结果持久化（IndexedDB / 后端）、多人协作、类别可配置
+4. **智能填充 / 插值**：相邻点大概率同类，自动补缝隙（替代手动涂鸦的漏涂）
+5. **统计增强**：标注完成度百分比、各类别占比饼图、导出 CSV / Label Studio 格式
 
 ## 常用命令
 
