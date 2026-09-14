@@ -11,6 +11,7 @@ import * as Cesium from 'cesium'
 import { usePointCloud } from '../composables/usePointCloud'
 import { registerPointCloud } from '../composables/pointCloudRegistry'
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
+import { createArcGisImageryLayers } from '../composables/basemap'
 
 const container = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer
@@ -50,6 +51,12 @@ onMounted(() => {
   viewer.scene.globe.show = false
   if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
   viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b0e14')
+  // 启用 ArcGIS World_Imagery 卫星底图（默认始终开启，不探测 / 不降级）。
+  // 点云高程拾 GROUND_CLEARANCE=2 拾升，避免与地表共面 z-fighting。
+  for (const layer of createArcGisImageryLayers()) viewer.imageryLayers.add(layer)
+  viewer.scene.globe.show = true
+  // 底色调成与界面一致的深色 —— 瓦片加载中/失败时不会露出刺眼的亮蓝
+  viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b0e14')
 
   // 原型级 patch 已在脚本顶部（onMounted 之前）安装。
 

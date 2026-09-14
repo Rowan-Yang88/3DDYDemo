@@ -4,6 +4,12 @@ import { useAnnotationStore } from '../store/annotation'
 import { parsePcd, toFlatPositions } from './pcd'
 import { parsePcdInWorker, terminatePcdWorker } from './pcdWorker'
 
+// 点云 ENU 原点相对椭球面的抬升量（米）。
+// 卫星底图启用后地面点在 h=0 会与地球表面共面，出现 z-fighting（点忽隐忽现），
+// 因此把整个 ENU 原点统一抬升一点。真实带高程的点云也会被同步抬升 2m，
+// 这是固定偏移、已记录在 README「已知限制」。
+const GROUND_CLEARANCE = 2
+
 // 单点标注 API（供 Toolbar / ClassPanel 通过 registry 调用）
 export type PointCloudApi = ReturnType<typeof usePointCloud>
 
@@ -263,7 +269,7 @@ export function usePointCloud(viewer: Cesium.Viewer) {
   function loadSample() {
     const lon = 116.391
     const lat = 39.907
-    const base = Cesium.Cartesian3.fromDegrees(lon, lat, 0)
+    const base = Cesium.Cartesian3.fromDegrees(lon, lat, GROUND_CLEARANCE)
     const enu = Cesium.Transforms.eastNorthUpToFixedFrame(base)
     const step = 12 // 米
     const n = 50
@@ -386,7 +392,7 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     // ---- 4) ENU 原点 -> 世界坐标（默认北京；真实数据可换成点云实际经纬度）----
     const lon = store.pcdOrigin?.lon ?? 116.391
     const lat = store.pcdOrigin?.lat ?? 39.907
-    const base = Cesium.Cartesian3.fromDegrees(lon, lat, 0)
+    const base = Cesium.Cartesian3.fromDegrees(lon, lat, GROUND_CLEARANCE)
     const enu = Cesium.Transforms.eastNorthUpToFixedFrame(base)
 
     // 包围盒，用于自动飞到合适视角（基于已过滤的有效点）
