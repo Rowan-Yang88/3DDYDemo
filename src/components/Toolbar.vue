@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useAnnotationStore } from '../store/annotation'
 import { getPointCloudApi } from '../composables/pointCloudRegistry'
 
@@ -13,18 +13,25 @@ const brushOptions = [
 ]
 
 const fileInput = ref<HTMLInputElement>()
-function onPcdSelected(e: Event) {
+async function onPcdSelected(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  file.arrayBuffer().then((buf) => {
-    try {
-      getPointCloudApi()?.loadPcd(buf)
-    } catch (err) {
-      alert('点云加载失败：' + (err as Error).message)
-    }
-  })
   input.value = '' // 允许重复选择同一文件
+
+  const sizeMb = (file.size / 1024 / 1024).toFixed(2)
+  try {
+    store.setParsing(true, `正在解析 ${file.name}（${sizeMb} MB）…`)
+    // 先让 Vue 把 loading 遮罩渲染出来，再开始读取/解析，否则小文件看不到反馈
+    await nextTick()
+    const buf = await file.arrayBuffer()
+    // loadPcd 为 async：解析在 Web Worker 中完成，不阻塞主线程
+    await getPointCloudApi()?.loadPcd(buf)
+  } catch (err) {
+    alert('点云加载失败：' + (err as Error).message)
+  } finally {
+    store.setParsing(false)
+  }
 }
 
 function exportAnnotations() {

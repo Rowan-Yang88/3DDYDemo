@@ -1,6 +1,9 @@
 // PCD 点云文件解析（支持 ASCII 与 binary_little_endian 两种 DATA 格式）
 // 返回局部坐标（米）下的 xyz 点列表。真实激光雷达点云通常是局部坐标，
 // 需要由调用方映射到 Cesium 世界坐标（见 usePointCloud.loadPcd）。
+//
+// 本文件是纯函数、不依赖 DOM，因此既能被主线程直接调用（降级路径），
+// 也能被 src/workers/pcd.worker.ts 在 Worker 线程里复用（默认路径）。
 
 export interface PcdData {
   positions: number[][] // [[x,y,z], ...] 局部坐标（米）
@@ -112,4 +115,20 @@ export function parsePcd(buffer: ArrayBuffer): PcdData {
   }
 
   return { positions, count: positions.length }
+}
+
+/**
+ * 把 [[x,y,z], ...] 打包成连续的 Float32Array（[x,y,z,x,y,z,...]）。
+ * 用途：跨线程传递时用 transfer 零拷贝传输，比传 number[][] 快得多。
+ */
+export function toFlatPositions(positions: number[][], count: number): Float32Array {
+  const flat = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const p = positions[i]
+    const o = i * 3
+    flat[o] = p[0]
+    flat[o + 1] = p[1]
+    flat[o + 2] = p[2]
+  }
+  return flat
 }

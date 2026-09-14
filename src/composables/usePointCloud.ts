@@ -1,7 +1,8 @@
 import * as Cesium from 'cesium'
 import { ref } from 'vue'
 import { useAnnotationStore } from '../store/annotation'
-import { parsePcd } from './pcd'
+import { parsePcd, toFlatPositions } from './pcd'
+import { parsePcdInWorker, terminatePcdWorker } from './pcdWorker'
 
 // 单点标注 API（供 Toolbar / ClassPanel 通过 registry 调用）
 export type PointCloudApi = ReturnType<typeof usePointCloud>
@@ -328,28 +329,50 @@ export function usePointCloud(viewer: Cesium.Viewer) {
 
   /**
    * 加载真实 .pcd 点云（前端直接解析，复用 PointPrimitiveCollection 标注链路）。
+   *
+   * 性能设计：解析在 Web Worker 中完成，主线程只负责把返回的坐标映射到 Cesium
+   * 世界坐标，因此大文件解析期间 UI 不会冻结（按钮/面板仍可响应）。Worker 不可用时
+   * 自动降级为主线程同步解析，保证功能不缺失。坐标数组以 transfer 方式跨线程传递，
+   * 避免结构化克隆的额外拷贝。
+   *
    * 解析得到局部坐标后，用 ENU（以固定原点为基准）映射到 Cesium 世界坐标，
    * 然后逐点加入 collection，与示例点云走完全相同的 paintRadius / 撤销重做 / 导出逻辑。
    *
-   * 适合作品集演示（数千~数万点）。规模更大（百万级）建议改用 3D Tiles(pnts)，见 README。
+   * 适合作品集演示（数千~数十万点，超 6 万点自动降采样）。
+   * 规模更大（百万级以上）建议改用 3D Tiles(pnts)，见 README。
    */
-  function loadPcd(buffer: ArrayBuffer) {
-    const pcd = parsePcd(buffer)
-    if (pcd.count === 0) throw new Error('PCD 文件无有效点')
+  async function loadPcd(buffer: ArrayBuffer) {
+    // ---- 1) 解析：优先 Worker（不阻塞主线程），Worker 不可用时降级为同步解析 ----
+    let flat: Float32Array
+    const task = parsePcdInWorker(buffer)
+    if (task) {
+      flat = await task
+    } else {
+      const pcd = parsePcd(buffer)
+      flat = toFlatPositions(pcd.positions, pcd.count)
+    }
 
-    // 过滤掉含 NaN / Infinity 的非法点（真实数据偶尔会有，必须跳过，
-    // 否则相机坐标会变成 NaN，Cesium 渲染时数组长度变 NaN 直接崩溃）
-    const valid = pcd.positions.filter(
-      ([x, y, z]) => Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z),
-    )
-    if (valid.length === 0) throw new Error('PCD 有效点为 0（坐标全为 NaN/Infinity）')
+    const total = flat.length / 3
+    if (total === 0) throw new Error('PCD 文件无有效点')
 
-    // 降采样：过大点云逐点建图元会卡，均匀降到上限以内
+    // ---- 2) 过滤 NaN / Infinity 的非法点 ----
+    // 真实数据偶尔会有，必须跳过，否则相机坐标变 NaN，
+    // Cesium 渲染时矩阵长度变 NaN 直接崩溃。
+    const validIdx: number[] = []
+    for (let i = 0; i < total; i++) {
+      const x = flat[i * 3]
+      const y = flat[i * 3 + 1]
+      const z = flat[i * 3 + 2]
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) validIdx.push(i)
+    }
+    if (validIdx.length === 0) throw new Error('PCD 有效点为 0（坐标全为 NaN/Infinity）')
+
+    // ---- 3) 降采样：过大点云逐点建图元会卡，均匀降到上限以内 ----
     const MAX_POINTS = 60000
-    let indices = [...Array(valid.length).keys()]
-    if (valid.length > MAX_POINTS) {
-      const step = Math.ceil(valid.length / MAX_POINTS)
-      indices = indices.filter((_, i) => i % step === 0)
+    let picked = validIdx
+    if (validIdx.length > MAX_POINTS) {
+      const step = Math.ceil(validIdx.length / MAX_POINTS)
+      picked = validIdx.filter((_, i) => i % step === 0)
     }
 
     // 清空示例/上一轮点云
@@ -360,7 +383,7 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     refDepth = 0
     hasRefDepth = false
 
-    // ENU 原点（默认北京；真实数据可换成你点云所在的经纬度）
+    // ---- 4) ENU 原点 -> 世界坐标（默认北京；真实数据可换成点云实际经纬度）----
     const lon = store.pcdOrigin?.lon ?? 116.391
     const lat = store.pcdOrigin?.lat ?? 39.907
     const base = Cesium.Cartesian3.fromDegrees(lon, lat, 0)
@@ -369,18 +392,27 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     // 包围盒，用于自动飞到合适视角（基于已过滤的有效点）
     let minX = Infinity, minY = Infinity, minZ = Infinity
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-    for (const [x, y, z] of valid) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x
-      if (y < minY) minY = y; if (y > maxY) maxY = y
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+    for (const i of validIdx) {
+      const x = flat[i * 3]
+      const y = flat[i * 3 + 1]
+      const z = flat[i * 3 + 2]
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+      if (z < minZ) minZ = z
+      if (z > maxZ) maxZ = z
     }
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
     const cz = (minZ + maxZ) / 2
     const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1)
 
-    for (const idx of indices) {
-      const [x, y, z] = valid[idx]
+    // ---- 5) 逐点映射并加入图元集合 ----
+    for (const i of picked) {
+      const x = flat[i * 3]
+      const y = flat[i * 3 + 1]
+      const z = flat[i * 3 + 2]
       const p = Cesium.Matrix4.multiplyByPoint(
         enu,
         new Cesium.Cartesian4(x, y, z, 1),
@@ -404,7 +436,7 @@ export function usePointCloud(viewer: Cesium.Viewer) {
     )
     // 反馈：控制台确认导入成功（点数 + 包围盒半径）
     console.log(
-      `[point-cloud-annotator] 已加载真实点云：${valid.length} 个点（默认全部未标注灰，可涂色）`,
+      `[point-cloud-annotator] 已加载真实点云：${validIdx.length} 个点（默认全部未标注灰，可涂色）`,
     )
   }
 
@@ -446,6 +478,7 @@ export function usePointCloud(viewer: Cesium.Viewer) {
   function dispose() {
     handler.destroy()
     viewer.scene.primitives.remove(collection)
+    terminatePcdWorker()
   }
 
   return { loadSample, loadTileset, loadPcd, paintRadius, exportAnnotations, dispose, collection, undo, redo }

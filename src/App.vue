@@ -2,6 +2,7 @@
 import ViewerCanvas from './components/ViewerCanvas.vue'
 import Toolbar from './components/Toolbar.vue'
 import ClassPanel from './components/ClassPanel.vue'
+import LoadingOverlay from './components/LoadingOverlay.vue'
 </script>
 
 <template>
@@ -9,6 +10,7 @@ import ClassPanel from './components/ClassPanel.vue'
     <ViewerCanvas />
     <Toolbar />
     <ClassPanel />
+    <LoadingOverlay />
   </div>
 </template>
 

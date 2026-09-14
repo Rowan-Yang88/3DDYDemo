@@ -29,6 +29,10 @@ export const useAnnotationStore = defineStore('annotation', () => {
   // 真实点云原点经纬度（ENU 映射基准），为 null 时用北京默认原点
   const pcdOrigin = ref<{ lon: number; lat: number } | null>(null)
 
+  // 解析中状态：大文件 PCD 在 Worker 中解析期间，由 LoadingOverlay 展示遮罩
+  const parsing = ref<boolean>(false)
+  const parsingText = ref<string>('')
+
   // 撤销重做栈
   // history: Array<操作记录>，每条记录是 { pointId: { old, new } } 的对象
   // 比如一次拖动涂了 50 个点，就是一条记录包含 50 个键值对
@@ -39,6 +43,10 @@ export const useAnnotationStore = defineStore('annotation', () => {
 
   function setCurrentClass(id: number) {
     currentClassId.value = id
+  }
+  function setParsing(v: boolean, text = '') {
+    parsing.value = v
+    parsingText.value = v ? text : ''
   }
   function toggleErase() {
     eraseMode.value = !eraseMode.value
@@ -103,6 +111,9 @@ export const useAnnotationStore = defineStore('annotation', () => {
     counts,
     totalPoints,
     pcdOrigin,
+    parsing,
+    parsingText,
+    setParsing,
     setCurrentClass,
     setCounts,
     setTotal,
