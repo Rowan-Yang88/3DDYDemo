@@ -67,6 +67,13 @@ function exportAnnotations() {
     >
       {{ store.eraseMode ? '橡皮擦：开' : '橡皮擦' }}
     </button>
+    <span class="depth-occl">
+      <button
+        :class="{ active: store.depthOcclusion }"
+        @click="store.setDepthOcclusion(!store.depthOcclusion)"
+        :title="store.depthOcclusion ? '深度遮挡：开（只涂同一深度的点）' : '深度遮挡：关（可涂背面）'"
+      >{{ store.depthOcclusion ? '深度遮挡：开' : '深度遮挡：关' }}</button>
+    </span>
     <span class="brush-size">
       <span class="brush-label">笔刷</span>
       <button
