@@ -151,9 +151,9 @@ export function usePointCloud(viewer: Cesium.Viewer) {
       const dy = sp.y - windowPos.y
       if (dx * dx + dy * dy > r2) continue
 
-      // 深度遮挡：比较相机距离
+      // 深度遮挡：只有开关打开时才比较相机距离
       // candidateDepth > mouseDepth → 候选点在鼠标点击物的后方，被遮挡，跳过
-      if (hasRefDepth) {
+      if (hasRefDepth && store.depthOcclusion) {
         const camPos = viewer.camera.positionWC
         const px = rec.prim.position.x - camPos.x
         const py = rec.prim.position.y - camPos.y

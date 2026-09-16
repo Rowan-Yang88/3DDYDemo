@@ -88,8 +88,8 @@ function exportAnnotations() {
         class="redo"
         @click="getPointCloudApi()?.redo()"
         :disabled="store.historyIndex >= store.history.length - 1"
-        title="重做 (Ctrl+Y)"
-      >重做</button>
+        title="恢复 (Ctrl+Y)"
+      >恢复</button>
     </span>
     <button class="export" @click="exportAnnotations">导出 JSON</button>
     <input
@@ -221,5 +221,14 @@ function exportAnnotations() {
 .toolbar .undo:not(:disabled):hover,
 .toolbar .redo:not(:disabled):hover {
   background: #2a3140;
+}
+.depth-occl button {
+  font-size: 12px;
+  padding: 4px 8px;
+  min-width: 60px;
+}
+.depth-occl button.active {
+  color: #86efac;
+  border-color: #86efac;
 }
 </style>

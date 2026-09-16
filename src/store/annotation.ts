@@ -24,6 +24,9 @@ export const useAnnotationStore = defineStore('annotation', () => {
   const brushDepthTolerance = ref<number>(1.5)
   // 橡皮擦开关：true 时拖动会把命中点改回 classId -1（未标注）
   const eraseMode = ref<boolean>(false)
+  // 深度遮挡开关：true（默认）时只涂与鼠标点击处在同一深度范围内的点；
+  // 关闭后可越过物体背面涂色，适合标注场景。
+  const depthOcclusion = ref<boolean>(true)
   const counts = reactive<Record<number, number>>({})
   const totalPoints = ref<number>(0)
   // 真实点云原点经纬度（ENU 映射基准），为 null 时用北京默认原点
@@ -50,6 +53,9 @@ export const useAnnotationStore = defineStore('annotation', () => {
   }
   function toggleErase() {
     eraseMode.value = !eraseMode.value
+  }
+  function setDepthOcclusion(v: boolean) {
+    depthOcclusion.value = v
   }
   function setCounts(c: Record<number, number>) {
     // Vue3 reactive 支持动态新增 key
@@ -108,6 +114,8 @@ export const useAnnotationStore = defineStore('annotation', () => {
     brushRadius,
     brushDepthTolerance,
     eraseMode,
+    depthOcclusion,
+    setDepthOcclusion,
     counts,
     totalPoints,
     pcdOrigin,
