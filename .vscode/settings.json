@@ -2,5 +2,6 @@
   "files.associations": {
     "*.vue": "vue"
   },
-  "editor.languageDetection": false
+  "editor.languageDetection": false,
+  "files.eol": "\n"
 }
